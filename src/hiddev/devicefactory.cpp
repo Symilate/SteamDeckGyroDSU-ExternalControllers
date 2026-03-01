@@ -30,17 +30,17 @@ namespace kmicki::hiddev
 
         while(cur)
         {
-            if(cur->vendor_id == kSdVID && cur->product_id == kSdPID
-               && cur->interface_number == kSdInterface)
-            {
-                found = ControllerType::SteamDeck;
-                break; // SD takes priority
-            }
             if(cur->vendor_id == cemuhook::switchpro::protocol::kVID
                && cur->product_id == cemuhook::switchpro::protocol::kPID)
             {
                 found = ControllerType::SwitchPro;
-                // Don't break — keep looking for SD which has priority
+                break; // External controllers take priority
+            }
+            if(cur->vendor_id == kSdVID && cur->product_id == kSdPID
+               && cur->interface_number == kSdInterface)
+            {
+                found = ControllerType::SteamDeck;
+                // Don't break — keep looking for external controllers
             }
             cur = cur->next;
         }
