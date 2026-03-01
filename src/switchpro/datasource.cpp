@@ -89,14 +89,16 @@ namespace kmicki::cemuhook::switchpro
         if(std::abs(sample.gyroY) < protocol::kGyroDeadzone) gyroY = 0.0f;
         if(std::abs(sample.gyroZ) < protocol::kGyroDeadzone) gyroZ = 0.0f;
 
-        // Identity mapping — gyro works but orientation requires vertical hold.
-        // TODO: fix axis mapping without breaking Ryujinx gyro detection.
-        motion.accX = accX;
-        motion.accY = accY;
-        motion.accZ = accZ;
-        motion.pitch = gyroX;
-        motion.yaw = gyroY;
-        motion.roll = gyroZ;
+        // Axis mapping based on SD controller pattern (gravity → accZ).
+        // Controller X axis has gravity when flat → maps to DSU accZ (up).
+        // Gyro axes follow the same remapping.
+        // Signs on accX/accY and yaw may need empirical adjustment.
+        motion.accX = accY;
+        motion.accY = accZ;
+        motion.accZ = accX;     // gravity
+        motion.pitch = gyroY;
+        motion.yaw = -gyroZ;
+        motion.roll = gyroX;
     }
 
     int const& DataSource::SetDataNewFrame(MotionData& motion)
