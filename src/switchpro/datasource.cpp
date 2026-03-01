@@ -89,30 +89,19 @@ namespace kmicki::cemuhook::switchpro
         if(std::abs(sample.gyroY) < protocol::kGyroDeadzone) gyroY = 0.0f;
         if(std::abs(sample.gyroZ) < protocol::kGyroDeadzone) gyroZ = 0.0f;
 
-        // Map to cemuhook DSU conventions.
-        // Pro Controller held normally (face up, sticks toward you):
-        //   accelY has gravity (~1G), accelX = left-right, accelZ = front-back
-        //   gyroX = pitch, gyroY = yaw, gyroZ = roll
-        //
-        // DSU expects:
-        //   accY = up-positive (gravity), accX = right, accZ = forward
-        //   pitch, yaw, roll as rotations around respective axes
-        //
-        // NOTE: Axis signs may need empirical adjustment.
-        motion.accX = accX;
-        motion.accY = accY;
+        // Empirically determined axis mapping (8BitDo SN30 Pro / Switch Pro):
+        //   Controller flat (face up): accX ≈ 1G, accY ≈ 0, accZ ≈ 0
+        //   DSU expects: accY = gravity (up-positive)
+        motion.accX = accY;
+        motion.accY = accX;
         motion.accZ = accZ;
-        motion.pitch = gyroX;
-        motion.yaw = gyroY;
+        motion.pitch = gyroY;
+        motion.yaw = gyroX;
         motion.roll = gyroZ;
     }
 
     int const& DataSource::SetDataNewFrame(MotionData& motion)
     {
-        // Block for the next HID report and use the newest IMU sample (index 2).
-        // The server calls us once per loop iteration and ignores toReplicate,
-        // so buffering all 3 sub-samples would cause us to return too fast and
-        // fall behind the real-time report stream.
         auto const& dataFrame = frameServe->GetPointer();
 
         {
@@ -120,16 +109,13 @@ namespace kmicki::cemuhook::switchpro
 
             if(!IsFullReport(*dataFrame))
             {
-                // Not a 0x30 report — skip
                 toReplicate = 0;
                 return toReplicate;
             }
 
             auto const& report = GetFullReport(*dataFrame);
 
-            // Detect missed reports via timer byte.
-            // BT jitter commonly causes single-tick gaps, so only log
-            // when 9+ reports appear to be missed.
+            // Detect missed reports via timer byte
             if(!firstFrame)
             {
                 uint8_t diff = report.timer - lastTimer;
@@ -151,8 +137,7 @@ namespace kmicki::cemuhook::switchpro
         currentTimestampUs += protocol::kImuSampleTimeUs;
 
         // Log motion data periodically (~once per second) for diagnostics
-        ++debugSampleCounter;
-        if(debugSampleCounter >= 60)
+        if(++debugSampleCounter >= 60)
         {
             ds::LogF(LogLevelDebug) << "IMU: acc("
                 << motion.accX << ", " << motion.accY << ", " << motion.accZ
