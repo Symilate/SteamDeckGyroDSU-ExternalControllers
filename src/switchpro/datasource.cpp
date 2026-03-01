@@ -89,11 +89,10 @@ namespace kmicki::cemuhook::switchpro
         if(std::abs(sample.gyroY) < protocol::kGyroDeadzone) gyroY = 0.0f;
         if(std::abs(sample.gyroZ) < protocol::kGyroDeadzone) gyroZ = 0.0f;
 
-        // Empirically determined axis mapping (8BitDo SN30 Pro / Switch Pro):
-        //   Controller flat (face up): accX ≈ 1G, accY ≈ 0, accZ ≈ 0
-        //   DSU expects: accY = gravity (up-positive)
-        motion.accX = accY;
-        motion.accY = accX;
+        // Identity mapping — gyro works but orientation requires vertical hold.
+        // TODO: fix axis mapping without breaking Ryujinx gyro detection.
+        motion.accX = accX;
+        motion.accY = accY;
         motion.accZ = accZ;
         motion.pitch = gyroX;
         motion.yaw = gyroY;
