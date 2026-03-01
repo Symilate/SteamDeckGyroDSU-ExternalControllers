@@ -9,7 +9,7 @@ namespace kmicki::cemuhook::switchpro
     using frame_t = hiddev::frame_t;
 
     // Raw IMU sample (12 bytes, all int16_t little-endian)
-    struct ImuSample
+    struct __attribute__((packed)) ImuSample
     {
         int16_t accelX;
         int16_t accelY;
@@ -21,7 +21,9 @@ namespace kmicki::cemuhook::switchpro
     static_assert(sizeof(ImuSample) == 12);
 
     // Full input report 0x30 (49 bytes, streamed at ~60Hz over BT)
-    struct FullReport
+    // Packed to match wire format (13 bytes of uint8_t fields before
+    // 2-byte-aligned ImuSample would otherwise get 1 byte of padding)
+    struct __attribute__((packed)) FullReport
     {
         uint8_t reportId;       // 0x30
         uint8_t timer;          // incrementing 0-255
