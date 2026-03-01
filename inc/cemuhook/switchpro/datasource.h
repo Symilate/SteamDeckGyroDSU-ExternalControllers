@@ -27,10 +27,8 @@ namespace kmicki::cemuhook::switchpro
 
         CalibrationData calibration;
 
-        // 3-sample buffering: each 0x30 report has 3 IMU samples
-        ImuSample sampleBuffer[3];
-        int samplesRemaining;   // 0 = need new report, 1-3 = buffered
-        int currentSampleIndex; // which sample to serve next
+        // Temp buffer for newest IMU sample from current report
+        ImuSample sampleBuffer[1];
 
         // Timestamp tracking
         uint8_t lastTimer;

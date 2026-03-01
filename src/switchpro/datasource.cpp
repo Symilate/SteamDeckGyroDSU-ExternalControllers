@@ -15,8 +15,8 @@ namespace kmicki::cemuhook::switchpro
     }
 
     DataSource::DataSource(hiddev::HidDevReader& _reader)
-    : reader(_reader), frameServe(nullptr), samplesRemaining(0),
-      currentSampleIndex(0), lastTimer(0), currentTimestampUs(0),
+    : reader(_reader), frameServe(nullptr),
+      lastTimer(0), currentTimestampUs(0),
       firstFrame(true), toReplicate(0)
     {
         calibration.SetDefaults();
@@ -47,8 +47,6 @@ namespace kmicki::cemuhook::switchpro
         lastTimer = 0;
         currentTimestampUs = 0;
         firstFrame = true;
-        samplesRemaining = 0;
-        currentSampleIndex = 0;
         toReplicate = 0;
         debugSampleCounter = 0;
 
@@ -93,81 +91,68 @@ namespace kmicki::cemuhook::switchpro
 
         // Map to cemuhook DSU conventions.
         // Pro Controller held normally (face up, sticks toward you):
-        //   accelX = left-right (positive = right)
-        //   accelY = front-back (positive = face-up/backward)
-        //   accelZ = up-down (positive = up against gravity)
+        //   accelY has gravity (~1G), accelX = left-right, accelZ = front-back
         //   gyroX = pitch, gyroY = yaw, gyroZ = roll
         //
         // DSU expects:
-        //   accX = right-positive, accY = up-positive, accZ = forward-positive
-        //   pitch = rotation around left-right axis
-        //   yaw = rotation around up axis
-        //   roll = rotation around forward axis
+        //   accY = up-positive (gravity), accX = right, accZ = forward
+        //   pitch, yaw, roll as rotations around respective axes
         //
-        // NOTE: These axis signs may need empirical adjustment with a real controller.
+        // NOTE: Axis signs may need empirical adjustment.
         motion.accX = accX;
-        motion.accY = accZ;
-        motion.accZ = -accY;
+        motion.accY = accY;
+        motion.accZ = accZ;
         motion.pitch = gyroX;
-        motion.yaw = -gyroY;
+        motion.yaw = gyroY;
         motion.roll = gyroZ;
     }
 
     int const& DataSource::SetDataNewFrame(MotionData& motion)
     {
-        if(samplesRemaining <= 0)
+        // Block for the next HID report and use the newest IMU sample (index 2).
+        // The server calls us once per loop iteration and ignores toReplicate,
+        // so buffering all 3 sub-samples would cause us to return too fast and
+        // fall behind the real-time report stream.
+        auto const& dataFrame = frameServe->GetPointer();
+
         {
-            // Need a new HID report
-            auto const& dataFrame = frameServe->GetPointer();
+            auto lock = frameServe->GetConsumeLock();
 
+            if(!IsFullReport(*dataFrame))
             {
-                auto lock = frameServe->GetConsumeLock();
-
-                if(!IsFullReport(*dataFrame))
-                {
-                    // Not a 0x30 report — skip
-                    toReplicate = 0;
-                    return toReplicate;
-                }
-
-                auto const& report = GetFullReport(*dataFrame);
-
-                // Detect missed reports via timer byte.
-                // BT jitter commonly causes single-tick gaps, so only log
-                // when 9+ reports appear to be missed.
-                if(!firstFrame)
-                {
-                    uint8_t diff = report.timer - lastTimer;
-                    if(diff > 9 && diff < 200)
-                    {
-                        ds::LogF(LogLevelDebug) << "Missed approximately " << (int)(diff - 1)
-                                                << " reports (timer gap).";
-                    }
-                }
-
-                lastTimer = report.timer;
-                firstFrame = false;
-
-                // Buffer all 3 IMU samples
-                sampleBuffer[0] = report.imu[0]; // oldest
-                sampleBuffer[1] = report.imu[1]; // middle
-                sampleBuffer[2] = report.imu[2]; // newest
+                // Not a 0x30 report — skip
+                toReplicate = 0;
+                return toReplicate;
             }
 
-            samplesRemaining = 3;
-            currentSampleIndex = 0;
+            auto const& report = GetFullReport(*dataFrame);
+
+            // Detect missed reports via timer byte.
+            // BT jitter commonly causes single-tick gaps, so only log
+            // when 9+ reports appear to be missed.
+            if(!firstFrame)
+            {
+                uint8_t diff = report.timer - lastTimer;
+                if(diff > 9 && diff < 200)
+                {
+                    ds::LogF(LogLevelDebug) << "Missed approximately " << (int)(diff - 1)
+                                            << " reports (timer gap).";
+                }
+            }
+
+            lastTimer = report.timer;
+            firstFrame = false;
+
+            // Use newest IMU sample from this report
+            sampleBuffer[0] = report.imu[2];
         }
 
-        // Serve the next buffered sample
-        SampleToMotion(sampleBuffer[currentSampleIndex], motion, currentTimestampUs);
+        SampleToMotion(sampleBuffer[0], motion, currentTimestampUs);
         currentTimestampUs += protocol::kImuSampleTimeUs;
-
-        ++currentSampleIndex;
-        --samplesRemaining;
 
         // Log motion data periodically (~once per second) for diagnostics
         ++debugSampleCounter;
-        if(debugSampleCounter >= 180)
+        if(debugSampleCounter >= 60)
         {
             ds::LogF(LogLevelDebug) << "IMU: acc("
                 << motion.accX << ", " << motion.accY << ", " << motion.accZ
@@ -175,7 +160,7 @@ namespace kmicki::cemuhook::switchpro
             debugSampleCounter = 0;
         }
 
-        toReplicate = samplesRemaining;
+        toReplicate = 0;
         return toReplicate;
     }
 }
