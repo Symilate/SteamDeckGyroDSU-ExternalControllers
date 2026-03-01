@@ -38,6 +38,7 @@ namespace kmicki::cemuhook::switchpro
         bool firstFrame;
 
         int toReplicate;
+        int debugSampleCounter = 0;
 
         // Convert calibrated IMU sample to MotionData
         void SampleToMotion(ImuSample const& sample,

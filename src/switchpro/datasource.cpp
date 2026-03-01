@@ -50,6 +50,7 @@ namespace kmicki::cemuhook::switchpro
         samplesRemaining = 0;
         currentSampleIndex = 0;
         toReplicate = 0;
+        debugSampleCounter = 0;
 
         ds::Log("Starting frame grab.", LogLevelDebug);
         reader.Start();
@@ -133,11 +134,11 @@ namespace kmicki::cemuhook::switchpro
 
                 // Detect missed reports via timer byte.
                 // BT jitter commonly causes single-tick gaps, so only log
-                // when 3+ reports appear to be missed.
+                // when 9+ reports appear to be missed.
                 if(!firstFrame)
                 {
                     uint8_t diff = report.timer - lastTimer;
-                    if(diff > 3 && diff < 200)
+                    if(diff > 9 && diff < 200)
                     {
                         ds::LogF(LogLevelDebug) << "Missed approximately " << (int)(diff - 1)
                                                 << " reports (timer gap).";
@@ -163,6 +164,16 @@ namespace kmicki::cemuhook::switchpro
 
         ++currentSampleIndex;
         --samplesRemaining;
+
+        // Log motion data periodically (~once per second) for diagnostics
+        ++debugSampleCounter;
+        if(debugSampleCounter >= 180)
+        {
+            ds::LogF(LogLevelDebug) << "IMU: acc("
+                << motion.accX << ", " << motion.accY << ", " << motion.accZ
+                << ") gyro(" << motion.pitch << ", " << motion.yaw << ", " << motion.roll << ")";
+            debugSampleCounter = 0;
+        }
 
         toReplicate = samplesRemaining;
         return toReplicate;
