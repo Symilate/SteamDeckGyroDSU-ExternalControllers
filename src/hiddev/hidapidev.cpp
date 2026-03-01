@@ -39,7 +39,7 @@ namespace kmicki::hiddev
 
         while(info != nullptr)
         {
-            if(info->interface_number == interfaceNumber)
+            if(interfaceNumber == -1 || info->interface_number == interfaceNumber)
             {
                 dev = hid_open_path(info->path);
                 if(dev != nullptr)

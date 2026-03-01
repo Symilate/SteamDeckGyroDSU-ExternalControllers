@@ -39,6 +39,13 @@ namespace kmicki::hiddev
             throw std::runtime_error(rwd::cLogPrefix + "Cannot set write data - operation is already started.");
         writeData = &_writeData;
     }
+
+    void HidDevReader::ReadWriteData::SetInitCallback(InitCallback callback)
+    {
+        if(IsStarted())
+            throw std::runtime_error(rwd::cLogPrefix + "Cannot set init callback - operation is already started.");
+        initCallback = callback;
+    }
  
     void HidDevReader::ReadWriteData::Execute()
     {
@@ -47,6 +54,14 @@ namespace kmicki::hiddev
         rwd::Log("Opening HID device.",LogLevelDebug);
         if(!dev.Open())
             throw std::runtime_error(rwd::cLogPrefix + "Problem opening HID device.");
+
+        if(initCallback)
+        {
+            rwd::Log("Running device initialization callback.",LogLevelDebug);
+            if(!initCallback(dev))
+                throw std::runtime_error(rwd::cLogPrefix + "Device initialization failed.");
+            rwd::Log("Device initialization complete.",LogLevelDebug);
+        }
 
         auto const& _readData = ReadData.GetPointerToFill();
 

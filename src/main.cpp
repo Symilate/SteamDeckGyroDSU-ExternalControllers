@@ -1,10 +1,10 @@
 #include "cemuhook/cemuhookserver.h"
+#include "cemuhook/controllerconfig.h"
+#include "hiddev/devicefactory.h"
 #include "log/log.h"
 #include <csignal>
 #include <libgen.h>
 #include "config/configcollection.h"
-#include "hiddev/hiddevreader.h"
-#include "cemuhook/sdcontroller/datasource.h"
 
 using namespace kmicki::hiddev;
 using namespace kmicki::log;
@@ -17,12 +17,6 @@ using namespace kmicki;
 const std::string cExecutableName = "sdgyrodsu";
 
 const LogLevel cLogLevel = LogLevelDebug; // change to Default when configuration is possible
-
-const int cFrameLen = 64;       // Steam Deck Controls' custom HID report length in bytes
-const int cScanTimeUs = 4000;   // Steam Deck Controls' period between received report data in microseconds
-const uint16_t cVID = 0x28de;   // Steam Deck Controls' USB Vendor-ID
-const uint16_t cPID = 0x1205;   // Steam Deck Controls' USB Product-ID
-const int cInterfaceNumber = 2; // Steam Deck Controls' USB Interface Number
 
 const std::string cVersion = "2.1-DEV-MULTI";   // Release version
 
@@ -136,11 +130,13 @@ void ProcessPars(const int &argc, char **argv, const std::unordered_map<char,std
 }
 
 bool InitializeConfig(  std::string const& configPath,
-                        std::unique_ptr<ConfigCollection> & configuration, 
-                        kmicki::cemuhook::Config *& serverConfig)
+                        std::unique_ptr<ConfigCollection> & configuration,
+                        kmicki::cemuhook::Config *& serverConfig,
+                        kmicki::cemuhook::ControllerConfig *& controllerConfig)
 {
     configuration.reset(new ConfigCollection(configPath));
     serverConfig = &(configuration->AddConfig<cemuhook::Config>([](auto& data) { return new cemuhook::Config(data); }));
+    controllerConfig = &(configuration->AddConfig<cemuhook::ControllerConfig>([](auto& data) { return new cemuhook::ControllerConfig(data); }));
     return configuration->Initialize();
 }
 
@@ -181,28 +177,31 @@ int main(int argc, char **argv)
 
     std::unique_ptr<ConfigCollection> configuration;
     cemuhook::Config* serverConfig;
-    if(!InitializeConfig(configPath,configuration,serverConfig) && GetLogLevel() != LogLevelTrace)
+    cemuhook::ControllerConfig* controllerConfig;
+    if(!InitializeConfig(configPath,configuration,serverConfig,controllerConfig) && GetLogLevel() != LogLevelTrace)
     {
         auto lastLevel = GetLogLevel();
         SetLogLevel(LogLevelTrace);
-        InitializeConfig(configPath,configuration,serverConfig);
+        InitializeConfig(configPath,configuration,serverConfig,controllerConfig);
         SetLogLevel(lastLevel);
     }
 
     { LogF() << "SteamDeckGyroDSU Version: " << cVersion; }
-    
-    HidDevReader reader(cVID,cPID,cInterfaceNumber,cFrameLen,cScanTimeUs);
-    sdcontroller::DataSource adapter(reader);
-    reader.SetWriteData(adapter.WriteData);
-    Server server(adapter,*serverConfig);
 
-    uint32_t lastInc = 0;
-    int stopping = 0;
+    auto device = CreateDevice(controllerConfig->Type());
 
-    std::unique_ptr<std::thread> presenter;
+    if(!device.valid)
+    {
+        Log("No supported controller found. Exiting.");
+        return 1;
+    }
+
+    { LogF() << "Using controller: " << ControllerTypeName(device.detectedType); }
+
+    Server server(*device.dataSource, *serverConfig);
 
     if(confTestRun)
-        reader.Start();
+        device.reader->Start();
 
     {
         std::unique_lock lock(stopMutex);

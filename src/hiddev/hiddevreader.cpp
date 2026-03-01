@@ -127,4 +127,9 @@ namespace kmicki::hiddev
     {
         readWriteData->SetWriteData(_writeData);
     }
+
+    void HidDevReader::SetInitCallback(InitCallback callback)
+    {
+        readWriteData->SetInitCallback(callback);
+    }
 }

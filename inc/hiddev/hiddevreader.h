@@ -3,8 +3,10 @@
 
 #include <vector>
 #include <shared_mutex>
+#include <functional>
 
 #include "hiddev.h"
+#include "hidapidev.h"
 
 #include "pipeline/thread.h"
 #include "pipeline/signalout.h"
@@ -22,6 +24,9 @@ namespace kmicki::hiddev
     class HidDevReader
     {
         public:
+
+        // Callback invoked after device is opened but before read loop.
+        using InitCallback = std::function<bool(HidApiDev&)>;
 
         HidDevReader() = delete;
 
@@ -60,6 +65,9 @@ namespace kmicki::hiddev
         // Set pipe for writing data to device
         void SetWriteData(PipeOut<frame_t>& _writeData);
 
+        // Set initialization callback (called after device open, before read loop)
+        void SetInitCallback(InitCallback callback);
+
         protected:
 
         // Pipeline threads
@@ -67,11 +75,17 @@ namespace kmicki::hiddev
         class ReadWriteData : public Thread
         {
             public:
+            // Callback invoked after device is opened but before read loop.
+            // Receives the open HidApiDev for synchronous init commands.
+            // Return true to proceed, false to abort.
+            using InitCallback = std::function<bool(HidApiDev&)>;
+
             ReadWriteData() = delete;
             ReadWriteData(uint16_t const& vId, uint16_t const& pId, int const& interfaceNumber, int const& _frameLen, int const& scanTimeUs);
             ~ReadWriteData();
 
             void SetWriteData(PipeOut<frame_t>& _writeData);
+            void SetInitCallback(InitCallback callback);
 
             PipeOut<frame_t> ReadData;
             SignalOut Unsynced;
@@ -87,7 +101,8 @@ namespace kmicki::hiddev
             int timeout;
 
             PipeOut<std::vector<unsigned char>> *writeData;
-            
+            InitCallback initCallback;
+
             void FlushPipes() override;
         };
 
