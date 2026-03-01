@@ -131,11 +131,13 @@ namespace kmicki::cemuhook::switchpro
 
                 auto const& report = GetFullReport(*dataFrame);
 
-                // Detect missed reports via timer byte
+                // Detect missed reports via timer byte.
+                // BT jitter commonly causes single-tick gaps, so only log
+                // when 3+ reports appear to be missed.
                 if(!firstFrame)
                 {
                     uint8_t diff = report.timer - lastTimer;
-                    if(diff > 1 && diff < 200)
+                    if(diff > 3 && diff < 200)
                     {
                         ds::LogF(LogLevelDebug) << "Missed approximately " << (int)(diff - 1)
                                                 << " reports (timer gap).";
