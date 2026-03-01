@@ -4,6 +4,7 @@
 #include "cemuhook/switchpro/protocol.h"
 #include "log/log.h"
 #include <hidapi/hidapi.h>
+#include <iomanip>
 
 using namespace kmicki::log;
 
@@ -30,6 +31,11 @@ namespace kmicki::hiddev
 
         while(cur)
         {
+            { df::LogF(LogLevelDebug) << "Enumerated HID device: VID=0x"
+                << std::hex << std::setfill('0') << std::setw(4) << cur->vendor_id
+                << " PID=0x" << std::setw(4) << cur->product_id
+                << std::dec << " interface=" << cur->interface_number; }
+
             if(cur->vendor_id == cemuhook::switchpro::protocol::kVID
                && cur->product_id == cemuhook::switchpro::protocol::kPID)
             {
@@ -44,6 +50,8 @@ namespace kmicki::hiddev
             }
             cur = cur->next;
         }
+
+        { df::LogF(LogLevelDebug) << "Detection result: " << ControllerTypeName(found); }
 
         hid_free_enumeration(devs);
         return found;
